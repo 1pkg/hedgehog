@@ -3,8 +3,6 @@ package hedgehog
 import (
 	"context"
 	"errors"
-	"fmt"
-	"math"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
@@ -14,13 +12,11 @@ import (
 )
 
 const (
-	ms_0   = time.Millisecond * 0
-	ms_1   = time.Millisecond * 1
-	ms_5   = time.Millisecond * 5
-	ms_10  = time.Millisecond * 10
-	ms_20  = time.Millisecond * 20
-	ms_50  = time.Millisecond * 50
-	ms_100 = time.Millisecond * 50
+	ms_0  = time.Millisecond * 0
+	ms_1  = time.Millisecond * 1
+	ms_5  = time.Millisecond * 5
+	ms_10 = time.Millisecond * 10
+	ms_20 = time.Millisecond * 20
 )
 
 func tserv(method string, path string, codes []int, delays []time.Duration) (string, context.CancelFunc) {
@@ -55,69 +51,46 @@ func unwrapHttpError(err error) string {
 	return err.Error()
 }
 
-type treq struct {
-	method string
-	path   string
-	codes  []int
-	delays []time.Duration
-}
-
-type tresp struct {
-	code  int
-	delay time.Duration
-	err   error
-}
-
-type tcall struct {
-	req  treq
-	resp tresp
-}
-
 func TestRoundTripper(t *testing.T) {
+	type treq struct {
+		method string
+		path   string
+		codes  []int
+		delays []time.Duration
+	}
+	type tresp struct {
+		code  int
+		delay time.Duration
+		err   error
+	}
 	ctxCanceled, cancel := context.WithCancel(context.TODO())
 	cancel()
 	ttable := map[string]struct {
-		ctx    context.Context
-		t      http.RoundTripper
-		tcalls []tcall
+		ctx   context.Context
+		t     http.RoundTripper
+		tcall struct {
+			req  treq
+			resp tresp
+		}
 	}{
-		"should execute default transport if no matching resources find by method": {
+		"should execute default transport if no matching resources find": {
 			ctx: context.TODO(),
 			t: NewRoundTripper(
 				http.DefaultTransport,
 				1,
-				NewResourceStatic(MethodGet, regexp.MustCompile(`profile`), ms_1, http.StatusOK),
+				NewResourceStatic(http.MethodGet, regexp.MustCompile(`users`), ms_1, http.StatusOK),
 			),
-			tcalls: []tcall{
-				{
-					req: treq{
-						method: "Post",
-						path:   "/profile",
-						codes:  []int{http.StatusOK},
-					},
-					resp: tresp{
-						code: http.StatusOK,
-					},
+			tcall: struct {
+				req  treq
+				resp tresp
+			}{
+				req: treq{
+					method: http.MethodGet,
+					path:   "/profile",
+					codes:  []int{http.StatusOK, http.StatusOK},
 				},
-			},
-		},
-		"should execute default transport if no matching resources find by path": {
-			ctx: context.TODO(),
-			t: NewRoundTripper(
-				http.DefaultTransport,
-				1,
-				NewResourceStatic(MethodGet, regexp.MustCompile(`users`), ms_1, http.StatusOK),
-			),
-			tcalls: []tcall{
-				{
-					req: treq{
-						method: "Get",
-						path:   "/profile",
-						codes:  []int{http.StatusOK, http.StatusOK},
-					},
-					resp: tresp{
-						code: http.StatusOK,
-					},
+				resp: tresp{
+					code: http.StatusOK,
 				},
 			},
 		},
@@ -126,18 +99,19 @@ func TestRoundTripper(t *testing.T) {
 			t: NewRoundTripper(
 				http.DefaultTransport,
 				1,
-				NewResourceStatic(MethodPut, regexp.MustCompile(`profile`), ms_1, http.StatusOK),
+				NewResourceStatic(http.MethodPut, regexp.MustCompile(`profile`), ms_1, http.StatusOK),
 			),
-			tcalls: []tcall{
-				{
-					req: treq{
-						method: "Put",
-						path:   "/profile",
-						codes:  []int{http.StatusOK, http.StatusOK},
-					},
-					resp: tresp{
-						err: ctxCanceled.Err(),
-					},
+			tcall: struct {
+				req  treq
+				resp tresp
+			}{
+				req: treq{
+					method: http.MethodPut,
+					path:   "/profile",
+					codes:  []int{http.StatusOK, http.StatusOK},
+				},
+				resp: tresp{
+					err: ctxCanceled.Err(),
 				},
 			},
 		},
@@ -146,18 +120,19 @@ func TestRoundTripper(t *testing.T) {
 			t: NewRoundTripper(
 				http.DefaultTransport,
 				1,
-				NewResourceStatic(MethodHead, regexp.MustCompile(`profile`), ms_1, http.StatusOK),
+				NewResourceStatic(http.MethodDelete, regexp.MustCompile(`profile`), ms_1, http.StatusOK),
 			),
-			tcalls: []tcall{
-				{
-					req: treq{
-						method: "Head",
-						path:   "/profile",
-						codes:  []int{http.StatusForbidden, http.StatusForbidden},
-					},
-					resp: tresp{
-						err: ErrResourceUnexpectedResponseCode{StatusCode: http.StatusForbidden},
-					},
+			tcall: struct {
+				req  treq
+				resp tresp
+			}{
+				req: treq{
+					method: http.MethodDelete,
+					path:   "/profile",
+					codes:  []int{http.StatusForbidden, http.StatusForbidden},
+				},
+				resp: tresp{
+					err: ErrResourceUnexpectedResponseCode{StatusCode: http.StatusForbidden},
 				},
 			},
 		},
@@ -166,18 +141,19 @@ func TestRoundTripper(t *testing.T) {
 			t: NewRoundTripper(
 				http.DefaultTransport,
 				1,
-				NewResourceStatic(MethodOptions, regexp.MustCompile(`profile`), ms_1, http.StatusOK),
+				NewResourceStatic(http.MethodGet, regexp.MustCompile(`profile`), ms_1, http.StatusOK),
 			),
-			tcalls: []tcall{
-				{
-					req: treq{
-						method: "Options",
-						path:   "/profile",
-						codes:  []int{http.StatusOK, http.StatusOK},
-					},
-					resp: tresp{
-						code: http.StatusOK,
-					},
+			tcall: struct {
+				req  treq
+				resp tresp
+			}{
+				req: treq{
+					method: http.MethodGet,
+					path:   "/profile",
+					codes:  []int{http.StatusOK, http.StatusOK},
+				},
+				resp: tresp{
+					code: http.StatusOK,
 				},
 			},
 		},
@@ -186,18 +162,19 @@ func TestRoundTripper(t *testing.T) {
 			t: NewRoundTripper(
 				http.DefaultTransport,
 				1,
-				NewResourceStatic(MethodHead, regexp.MustCompile(`profile`), ms_1, http.StatusOK),
+				NewResourceStatic(http.MethodGet, regexp.MustCompile(`profile`), ms_1, http.StatusOK),
 			),
-			tcalls: []tcall{
-				{
-					req: treq{
-						method: "Head",
-						path:   "/profile",
-						codes:  []int{http.StatusForbidden, http.StatusOK},
-					},
-					resp: tresp{
-						code: http.StatusOK,
-					},
+			tcall: struct {
+				req  treq
+				resp tresp
+			}{
+				req: treq{
+					method: http.MethodGet,
+					path:   "/profile",
+					codes:  []int{http.StatusForbidden, http.StatusOK},
+				},
+				resp: tresp{
+					code: http.StatusOK,
 				},
 			},
 		},
@@ -206,78 +183,21 @@ func TestRoundTripper(t *testing.T) {
 			t: NewRoundTripper(
 				http.DefaultTransport,
 				3,
-				NewResourceStatic(MethodTrace, regexp.MustCompile(`profile/[0-9]`), ms_1, http.StatusOK),
+				NewResourceStatic(http.MethodGet, regexp.MustCompile(`profile/[0-9]`), ms_1, http.StatusOK),
 			),
-			tcalls: []tcall{
-				{
-					req: treq{
-						method: "Trace",
-						path:   "/profile/7",
-						codes:  []int{http.StatusOK, http.StatusOK, http.StatusOK, http.StatusOK},
-						delays: []time.Duration{ms_20, ms_5, ms_20, ms_5, ms_20},
-					},
-					resp: tresp{
-						code:  http.StatusOK,
-						delay: ms_5,
-					},
+			tcall: struct {
+				req  treq
+				resp tresp
+			}{
+				req: treq{
+					method: http.MethodGet,
+					path:   "/profile/7",
+					codes:  []int{http.StatusOK, http.StatusOK, http.StatusOK, http.StatusOK},
+					delays: []time.Duration{ms_20, ms_5, ms_20, ms_5, ms_20},
 				},
-			},
-		},
-		"should memorize latencies on dynamic resources and return response back": {
-			ctx: context.TODO(),
-			t: NewRoundTripper(
-				http.DefaultTransport,
-				2,
-				NewResourceDynamic(MethodConnect|MethodDelete, regexp.MustCompile(`profile/[0-9]+`), ms_1, 0.5, 3, http.StatusOK),
-			),
-			tcalls: []tcall{
-				{
-					req: treq{
-						method: "Connect",
-						path:   "/profile/711",
-						codes:  []int{http.StatusOK, http.StatusOK, http.StatusOK},
-						delays: []time.Duration{ms_100, ms_50, ms_100},
-					},
-					resp: tresp{
-						code:  http.StatusOK,
-						delay: ms_50,
-					},
-				},
-				{
-					req: treq{
-						method: "Connect",
-						path:   "/profile/712",
-						codes:  []int{http.StatusOK, http.StatusOK, http.StatusOK},
-						delays: []time.Duration{ms_50, ms_20, ms_50},
-					},
-					resp: tresp{
-						code:  http.StatusOK,
-						delay: ms_20,
-					},
-				},
-				{
-					req: treq{
-						method: "Connect",
-						path:   "/profile/713",
-						codes:  []int{http.StatusOK, http.StatusOK, http.StatusOK},
-						delays: []time.Duration{ms_20, ms_1, ms_20},
-					},
-					resp: tresp{
-						code:  http.StatusOK,
-						delay: ms_1,
-					},
-				},
-				{
-					req: treq{
-						method: "Delete",
-						path:   "/profile/714",
-						codes:  []int{http.StatusOK, http.StatusOK, http.StatusOK},
-						delays: []time.Duration{ms_1, ms_1, ms_1},
-					},
-					resp: tresp{
-						code:  http.StatusOK,
-						delay: ms_20,
-					},
+				resp: tresp{
+					code:  http.StatusOK,
+					delay: ms_10,
 				},
 			},
 		},
@@ -285,25 +205,21 @@ func TestRoundTripper(t *testing.T) {
 	for tname, tcase := range ttable {
 		t.Run(tname, func(t *testing.T) {
 			cli := NewHTTPClient(nil, ClientWithRoundTripper(tcase.t))
-			for _, tcall := range tcase.tcalls {
-				t.Run(fmt.Sprintf("%s %s", tcall.req.method, tcall.req.path), func(t *testing.T) {
-					uri, stop := tserv(tcall.req.method, tcall.req.path, tcall.req.codes, tcall.req.delays)
-					req, _ := http.NewRequest(tcall.req.method, uri+tcall.req.path, nil)
-					req = req.WithContext(tcase.ctx)
-					ts := time.Now()
-					resp, err := cli.Do(req)
-					ds := time.Since(ts)
-					stop()
-					if unwrapHttpError(tcall.resp.err) != unwrapHttpError(err) {
-						t.Fatalf("expected err %v but got %v", unwrapHttpError(tcall.resp.err), unwrapHttpError(err))
-					}
-					if tcall.resp.err == nil && tcall.resp.code != resp.StatusCode {
-						t.Fatalf("expected response status code %d but got %d", tcall.resp.code, resp.StatusCode)
-					}
-					if tcall.resp.err == nil && time.Duration(math.Abs(float64(tcall.resp.delay-ds))) > ms_10 {
-						t.Fatalf("expected response latency be < %s but got %s", tcall.resp.delay, ds)
-					}
-				})
+			uri, stop := tserv(tcase.tcall.req.method, tcase.tcall.req.path, tcase.tcall.req.codes, tcase.tcall.req.delays)
+			req, _ := http.NewRequest(tcase.tcall.req.method, uri+tcase.tcall.req.path, nil)
+			req = req.WithContext(tcase.ctx)
+			ts := time.Now()
+			resp, err := cli.Do(req)
+			ds := time.Since(ts)
+			stop()
+			if unwrapHttpError(tcase.tcall.resp.err) != unwrapHttpError(err) {
+				t.Fatalf("expected err %v but got %v", unwrapHttpError(tcase.tcall.resp.err), unwrapHttpError(err))
+			}
+			if tcase.tcall.resp.code != 0 && tcase.tcall.resp.code != resp.StatusCode {
+				t.Fatalf("expected response status code %d but got %d", tcase.tcall.resp.code, resp.StatusCode)
+			}
+			if tcase.tcall.resp.delay != 0 && tcase.tcall.resp.delay < ds {
+				t.Fatalf("expected response latency be < %s but got %s", tcase.tcall.resp.delay, ds)
 			}
 		})
 	}

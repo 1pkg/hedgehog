@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"regexp"
 	"sort"
-	"strings"
 	"sync"
 	"time"
 )
@@ -26,55 +25,14 @@ type Resource interface {
 	Hook(*http.Request) func(*http.Response)
 }
 
-type Method uint16
-
-const (
-	MethodGet Method = 1 << iota
-	MethodHead
-	MethodPost
-	MethodPut
-	MethodDelete
-	MethodConnect
-	MethodOptions
-	MethodTrace
-	MethodPatch
-	MethodUndefined
-)
-
-func toMethod(method string) Method {
-	method = strings.ToUpper(method)
-	switch method {
-	case "GET":
-		return MethodGet
-	case "HEAD":
-		return MethodHead
-	case "POST":
-		return MethodPost
-	case "PUT":
-		return MethodPut
-	case "DELETE":
-		return MethodDelete
-	case "CONNECT":
-		return MethodConnect
-	case "OPTIONS":
-		return MethodOptions
-	case "TRACE":
-		return MethodTrace
-	case "PATCH":
-		return MethodPatch
-	default:
-		return MethodUndefined
-	}
-}
-
 type static struct {
-	method Method
+	method string
 	path   *regexp.Regexp
 	delay  time.Duration
 	codes  map[int]bool
 }
 
-func NewResourceStatic(method Method, path *regexp.Regexp, delay time.Duration, allowedCodes ...int) Resource {
+func NewResourceStatic(method string, path *regexp.Regexp, delay time.Duration, allowedCodes ...int) Resource {
 	rs := static{
 		method: method,
 		path:   path,
@@ -92,7 +50,7 @@ func (r static) After() <-chan time.Time {
 }
 
 func (r static) Match(req *http.Request) bool {
-	if r.method&toMethod(req.Method) == 0 {
+	if r.method != req.Method {
 		return false
 	}
 	if r.path != nil && !r.path.MatchString(req.URL.String()) {
@@ -120,7 +78,7 @@ type dynamic struct {
 	lock       sync.RWMutex
 }
 
-func NewResourceDynamic(method Method, path *regexp.Regexp, delay time.Duration, percentile float64, capacity uint64, allowedCodes ...int) Resource {
+func NewResourceDynamic(method string, path *regexp.Regexp, delay time.Duration, percentile float64, capacity uint64, allowedCodes ...int) Resource {
 	percentile = math.Abs(percentile)
 	if percentile > 1.0 {
 		percentile = 1.0
