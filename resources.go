@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -70,34 +71,78 @@ func (r static) Hook(*http.Request) func(*http.Response) {
 	return func(*http.Response) {}
 }
 
-type dynamic struct {
+type average struct {
+	static
+	sum      int64
+	count    int64
+	capacity int64
+}
+
+func NewResourceAverage(method string, path *regexp.Regexp, delay time.Duration, capacity int, allowedCodes ...int) Resource {
+	if capacity < 0 {
+		capacity = math.MaxInt16
+	}
+	return &average{
+		static:   NewResourceStatic(method, path, delay, allowedCodes...).(static),
+		capacity: int64(capacity),
+	}
+}
+
+func (r *average) After() <-chan time.Time {
+	delay := r.delay
+	count := atomic.LoadInt64(&r.count)
+	if count > r.capacity {
+		delay = time.Duration(atomic.LoadInt64(&r.sum) / count)
+	}
+	return time.After(delay)
+}
+
+func (r *average) Hook(*http.Request) func(*http.Response) {
+	t := time.Now()
+	return func(*http.Response) {
+		d := time.Since(t)
+		oldval := atomic.LoadInt64(&r.sum)
+		newval := atomic.AddInt64(&r.sum, int64(d))
+		count := atomic.AddInt64(&r.count, 1)
+		// in case of overflow:
+		// - calculate average value on capacity+1
+		// - replace current sum and count with it
+		if newval < 0 {
+			val := oldval / count * (r.capacity + 1)
+			atomic.StoreInt64(&r.sum, val)
+			atomic.StoreInt64(&r.count, r.capacity+1)
+		}
+	}
+}
+
+type percentiles struct {
 	static
 	percentile float64
-	capacity   int
+	capacity   int64
 	latencies  []time.Duration
 	lock       sync.RWMutex
 }
 
-func NewResourceDynamic(method string, path *regexp.Regexp, delay time.Duration, percentile float64, capacity uint64, allowedCodes ...int) Resource {
+func NewResourcePercentiles(method string, path *regexp.Regexp, delay time.Duration, percentile float64, capacity int, allowedCodes ...int) Resource {
 	percentile = math.Abs(percentile)
 	if percentile > 1.0 {
 		percentile = 1.0
 	}
-	if capacity > math.MaxInt32 {
-		capacity = math.MaxInt32
+	if capacity < 0 {
+		capacity = math.MaxInt16
 	}
-	return &dynamic{
+	return &percentiles{
 		static:     NewResourceStatic(method, path, delay, allowedCodes...).(static),
 		percentile: percentile,
-		capacity:   int(capacity),
-		latencies:  make([]time.Duration, 0, capacity),
+		capacity:   int64(capacity),
+		latencies:  make([]time.Duration, 0, capacity+capacity/2),
 	}
 }
 
-func (r *dynamic) After() <-chan time.Time {
+func (r *percentiles) After() <-chan time.Time {
 	delay := r.delay
 	r.lock.RLock()
-	if l := len(r.latencies); l >= r.capacity {
+	if l := int64(len(r.latencies)); l >= r.capacity/2 {
 		lat := make([]time.Duration, l)
 		copy(lat, r.latencies)
 		sort.Slice(lat, func(i, j int) bool {
@@ -109,14 +154,15 @@ func (r *dynamic) After() <-chan time.Time {
 	return time.After(delay)
 }
 
-func (r *dynamic) Hook(*http.Request) func(*http.Response) {
+func (r *percentiles) Hook(*http.Request) func(*http.Response) {
 	t := time.Now()
 	return func(*http.Response) {
 		d := time.Since(t)
 		r.lock.Lock()
 		r.latencies = append(r.latencies, d)
-		if len(r.latencies) >= r.capacity*2 {
-			r.latencies = r.latencies[r.capacity:]
+		// in case of overflow: just drop half of the buffer
+		if int64(len(r.latencies)) >= r.capacity {
+			r.latencies = r.latencies[r.capacity/2:]
 		}
 		r.lock.Unlock()
 	}
