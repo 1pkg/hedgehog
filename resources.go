@@ -1,6 +1,7 @@
 package hedgehog
 
 import (
+	"fmt"
 	"math"
 	"net/http"
 	"regexp"
@@ -9,6 +10,14 @@ import (
 	"sync"
 	"time"
 )
+
+type ErrResourceUnexpectedResponseCode struct {
+	StatusCode int
+}
+
+func (err ErrResourceUnexpectedResponseCode) Error() string {
+	return fmt.Sprintf("resource check failed: received unexpected response status code %d", err.StatusCode)
+}
 
 type Resource interface {
 	After() <-chan time.Time
@@ -94,7 +103,7 @@ func (r static) Match(req *http.Request) bool {
 
 func (r static) Check(resp *http.Response) error {
 	if !r.codes[resp.StatusCode] {
-		return nil
+		return ErrResourceUnexpectedResponseCode{StatusCode: resp.StatusCode}
 	}
 	return nil
 }

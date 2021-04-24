@@ -30,8 +30,8 @@ func (t transport) multiRoundTrip(req *http.Request, rs Resource) (resp *http.Re
 	g, ctx := errgroup.WithContext(req.Context())
 	req = req.WithContext(ctx)
 	res := make(chan interface{}, t.calls+1)
+	defer close(res)
 	g.Go(func() error {
-		defer close(res)
 		for i := uint64(0); i < t.calls+1; i++ {
 			select {
 			case r := <-res:
@@ -41,10 +41,15 @@ func (t transport) multiRoundTrip(req *http.Request, rs Resource) (resp *http.Re
 					// if we got result hard stop execution.
 					return context.Canceled
 				case error:
-					err = tr
+					// keep only first occured error.
+					if err == nil {
+						err = tr
+					}
 				}
 			case <-ctx.Done():
-				return ctx.Err()
+				err = ctx.Err()
+				// if group was canceled hard stop execution.
+				return context.Canceled
 			}
 		}
 		return nil
