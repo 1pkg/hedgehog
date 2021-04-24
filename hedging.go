@@ -2,38 +2,37 @@ package hedgehog
 
 import (
 	"net/http"
+	"time"
 
 	"golang.org/x/sync/errgroup"
 )
 
-var FanoutTimes uint64 = 1
-
 type hedging struct {
-	processor http.RoundTripper
+	internal  http.RoundTripper
 	resources []Resource
+	times     uint64
 }
 
-func NewHedging(processor http.RoundTripper, resources ...Resource) http.RoundTripper {
-	return hedging{processor: processor, resources: resources}
+func NewHedging(internal http.RoundTripper, times uint64, resources ...Resource) http.RoundTripper {
+	return hedging{internal: internal, times: times + 1, resources: resources}
 }
 
-func (t hedging) RoundTrip(req *http.Request) (resp *http.Response, err error) {
+func (rt hedging) RoundTrip(req *http.Request) (resp *http.Response, err error) {
 	var resource Resource
-	for _, rs := range t.resources {
+	for _, rs := range rt.resources {
 		if rs.Match(req) {
 			resource = rs
 		}
 	}
 	if resource == nil {
-		return t.processor.RoundTrip(req)
+		return rt.internal.RoundTrip(req)
 	}
 	g, ctx := errgroup.WithContext(req.Context())
 	req = req.WithContext(ctx)
-	times := FanoutTimes + 1
-	results := make(chan interface{}, times)
+	results := make(chan interface{}, rt.times)
 	g.Go(func() error {
 		defer close(results)
-		for i := uint64(0); i < times; i++ {
+		for i := uint64(0); i < rt.times; i++ {
 			select {
 			case <-results:
 			case <-ctx.Done():
@@ -42,21 +41,24 @@ func (t hedging) RoundTrip(req *http.Request) (resp *http.Response, err error) {
 		}
 		return nil
 	})
-	for i := uint64(0); i < times; i++ {
+	for i := uint64(0); i < rt.times; i++ {
 		g.Go(func() error {
-			resp, err := t.processor.RoundTrip(req)
+			t := time.Now()
+			resp, err := rt.internal.RoundTrip(req)
 			if err != nil {
 				results <- err
 				return nil
 			}
+			d := time.Since(t)
 			if err := resource.Check(resp); err != nil {
 				results <- err
 				return nil
 			}
+			resource.Acknowledge(d)
 			results <- resp
 			return nil
 		})
-		if i == 0 && times > 1 {
+		if i == 0 && rt.times > 1 {
 			<-resource.After()
 		}
 	}
