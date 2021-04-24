@@ -7,12 +7,31 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+// NewHTTPClient wraps provided http client with hedged transport.
+// If nil client is provided default client will be used, if nil transport is provided default transport will be used.
+func NewHTTPClient(client *http.Client, calls uint64, resources ...Resource) *http.Client {
+	if client == nil {
+		client = http.DefaultClient
+	}
+	if client.Transport == nil {
+		client.Transport = http.DefaultTransport
+	}
+	client.Transport = NewRoundTripper(client.Transport, calls, resources...)
+	return client
+}
+
 type transport struct {
 	internal  http.RoundTripper
 	resources []Resource
 	calls     uint64
 }
 
+// NewRoundTripper returns new http hedged transport with provided resources.
+// Returned transport will make hedged http calls in case of resource matching http request up to calls+1 times,
+// original http call starts right away and then all hedged calls start together after delay specified by resource.
+// Returned transport will process and return first successfull http response, in case all hedged response failed
+// it will simply return first occured error.
+// If no matching resource were found - the transport will simply call underlying transport.
 func NewRoundTripper(internal http.RoundTripper, calls uint64, resources ...Resource) http.RoundTripper {
 	return transport{internal: internal, calls: calls, resources: resources}
 }

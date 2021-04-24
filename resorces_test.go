@@ -8,14 +8,15 @@ import (
 )
 
 const (
-	ms_0  = time.Millisecond * 0
-	ms_1  = time.Millisecond * 1
-	ms_2  = time.Millisecond * 2
-	ms_5  = time.Millisecond * 5
-	ms_7  = time.Millisecond * 7
-	ms_10 = time.Millisecond * 10
-	ms_20 = time.Millisecond * 20
-	ms_50 = time.Millisecond * 50
+	ms_0   = time.Millisecond * 0
+	ms_1   = time.Millisecond * 1
+	ms_2   = time.Millisecond * 2
+	ms_5   = time.Millisecond * 5
+	ms_7   = time.Millisecond * 7
+	ms_10  = time.Millisecond * 10
+	ms_20  = time.Millisecond * 20
+	ms_50  = time.Millisecond * 50
+	ms_100 = time.Millisecond * 100
 )
 
 func TestResorces(t *testing.T) {

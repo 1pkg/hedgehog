@@ -59,19 +59,17 @@ func TestRoundTripper(t *testing.T) {
 	cancel()
 	ttable := map[string]struct {
 		ctx   context.Context
-		t     http.RoundTripper
+		calls uint64
+		res   []Resource
 		tcall struct {
 			req  treq
 			resp tresp
 		}
 	}{
 		"should execute default transport if no matching resources found method": {
-			ctx: context.TODO(),
-			t: NewRoundTripper(
-				http.DefaultTransport,
-				1,
-				NewResourceStatic(http.MethodGet, regexp.MustCompile(`profile`), ms_1, http.StatusOK),
-			),
+			ctx:   context.TODO(),
+			calls: 1,
+			res:   []Resource{NewResourceStatic(http.MethodGet, regexp.MustCompile(`profile`), ms_1, http.StatusOK)},
 			tcall: struct {
 				req  treq
 				resp tresp
@@ -87,12 +85,9 @@ func TestRoundTripper(t *testing.T) {
 			},
 		},
 		"should execute default transport if no matching resources found path": {
-			ctx: context.TODO(),
-			t: NewRoundTripper(
-				http.DefaultTransport,
-				1,
-				NewResourceStatic(http.MethodGet, regexp.MustCompile(`users`), ms_1, http.StatusOK),
-			),
+			ctx:   context.TODO(),
+			calls: 1,
+			res:   []Resource{NewResourceStatic(http.MethodGet, regexp.MustCompile(`users`), ms_1, http.StatusOK)},
 			tcall: struct {
 				req  treq
 				resp tresp
@@ -108,12 +103,9 @@ func TestRoundTripper(t *testing.T) {
 			},
 		},
 		"should return error back on canceled request and matching resources": {
-			ctx: ctxCanceled,
-			t: NewRoundTripper(
-				http.DefaultTransport,
-				1,
-				NewResourceStatic(http.MethodPut, regexp.MustCompile(`profile`), ms_1, http.StatusOK),
-			),
+			ctx:   ctxCanceled,
+			calls: 1,
+			res:   []Resource{NewResourceStatic(http.MethodPut, regexp.MustCompile(`profile`), ms_1, http.StatusOK)},
 			tcall: struct {
 				req  treq
 				resp tresp
@@ -129,12 +121,9 @@ func TestRoundTripper(t *testing.T) {
 			},
 		},
 		"should return error back on unexpected response status code and matching resources": {
-			ctx: context.TODO(),
-			t: NewRoundTripper(
-				http.DefaultTransport,
-				1,
-				NewResourceStatic(http.MethodDelete, regexp.MustCompile(`profile`), ms_1, http.StatusOK),
-			),
+			ctx:   context.TODO(),
+			calls: 1,
+			res:   []Resource{NewResourceStatic(http.MethodDelete, regexp.MustCompile(`profile`), ms_1, http.StatusOK)},
 			tcall: struct {
 				req  treq
 				resp tresp
@@ -142,7 +131,8 @@ func TestRoundTripper(t *testing.T) {
 				req: treq{
 					method: http.MethodDelete,
 					path:   "/profile",
-					codes:  []int{http.StatusForbidden, http.StatusForbidden},
+					codes:  []int{http.StatusConflict, http.StatusForbidden},
+					delays: []time.Duration{ms_50, ms_2},
 				},
 				resp: tresp{
 					err: ErrResourceUnexpectedResponseCode{StatusCode: http.StatusForbidden},
@@ -150,12 +140,9 @@ func TestRoundTripper(t *testing.T) {
 			},
 		},
 		"should return response back on successful response and matching resources": {
-			ctx: context.TODO(),
-			t: NewRoundTripper(
-				http.DefaultTransport,
-				1,
-				NewResourceStatic(http.MethodGet, regexp.MustCompile(`profile`), ms_1, http.StatusOK),
-			),
+			ctx:   context.TODO(),
+			calls: 1,
+			res:   []Resource{NewResourceStatic(http.MethodGet, regexp.MustCompile(`profile`), ms_1, http.StatusOK)},
 			tcall: struct {
 				req  treq
 				resp tresp
@@ -170,13 +157,34 @@ func TestRoundTripper(t *testing.T) {
 				},
 			},
 		},
+		"should return response back on successful response and first matching resources": {
+			ctx:   context.TODO(),
+			calls: 1,
+			res: []Resource{
+				NewResourceStatic(http.MethodGet, regexp.MustCompile(`user`), ms_1, http.StatusOK),
+				NewResourceStatic(http.MethodPut, regexp.MustCompile(`profile`), ms_1, http.StatusOK),
+				NewResourceStatic(http.MethodGet, regexp.MustCompile(`profile`), ms_5, http.StatusOK),
+				NewResourceStatic(http.MethodGet, regexp.MustCompile(`profile`), ms_100, http.StatusOK),
+			},
+			tcall: struct {
+				req  treq
+				resp tresp
+			}{
+				req: treq{
+					method: http.MethodGet,
+					path:   "/profile",
+					codes:  []int{http.StatusNotFound, http.StatusOK},
+				},
+				resp: tresp{
+					code:  http.StatusOK,
+					delay: ms_50,
+				},
+			},
+		},
 		"should return response back on successful response and matching resources even if first request failed": {
-			ctx: context.TODO(),
-			t: NewRoundTripper(
-				http.DefaultTransport,
-				1,
-				NewResourceStatic(http.MethodGet, regexp.MustCompile(`profile`), ms_1, http.StatusOK),
-			),
+			ctx:   context.TODO(),
+			calls: 1,
+			res:   []Resource{NewResourceStatic(http.MethodGet, regexp.MustCompile(`profile`), ms_1, http.StatusOK)},
 			tcall: struct {
 				req  treq
 				resp tresp
@@ -192,12 +200,9 @@ func TestRoundTripper(t *testing.T) {
 			},
 		},
 		"should return response back on successful response and matching resources multi calls": {
-			ctx: context.TODO(),
-			t: NewRoundTripper(
-				http.DefaultTransport,
-				3,
-				NewResourceStatic(http.MethodGet, regexp.MustCompile(`profile/[0-9]`), ms_1, http.StatusOK),
-			),
+			ctx:   context.TODO(),
+			calls: 3,
+			res:   []Resource{NewResourceStatic(http.MethodGet, regexp.MustCompile(`profile/[0-9]`), ms_1, http.StatusOK)},
 			tcall: struct {
 				req  treq
 				resp tresp
@@ -206,18 +211,18 @@ func TestRoundTripper(t *testing.T) {
 					method: http.MethodGet,
 					path:   "/profile/7",
 					codes:  []int{http.StatusOK, http.StatusOK, http.StatusOK, http.StatusOK},
-					delays: []time.Duration{ms_50, ms_2, ms_50, ms_5, ms_50},
+					delays: []time.Duration{ms_100, ms_2, ms_100, ms_5, ms_100},
 				},
 				resp: tresp{
 					code:  http.StatusOK,
-					delay: ms_20,
+					delay: ms_50,
 				},
 			},
 		},
 	}
 	for tname, tcase := range ttable {
 		t.Run(tname, func(t *testing.T) {
-			cli := NewHTTPClient(nil, ClientWithRoundTripper(tcase.t))
+			cli := NewHTTPClient(nil, tcase.calls, tcase.res...)
 			uri, stop := tserv(tcase.tcall.req.method, tcase.tcall.req.path, tcase.tcall.req.codes, tcase.tcall.req.delays)
 			req, _ := http.NewRequest(tcase.tcall.req.method, uri+tcase.tcall.req.path, nil)
 			req = req.WithContext(tcase.ctx)

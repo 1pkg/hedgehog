@@ -11,6 +11,7 @@ import (
 	"time"
 )
 
+// ErrResourceUnexpectedResponseCode defines resource response check error that is returned on non matching response code.
 type ErrResourceUnexpectedResponseCode struct {
 	StatusCode int
 }
@@ -19,6 +20,10 @@ func (err ErrResourceUnexpectedResponseCode) Error() string {
 	return fmt.Sprintf("resource check failed: received unexpected response status code %d", err.StatusCode)
 }
 
+// Resource defines abstract http resource that is capable of:
+// - matching http request applicability
+// - checking http request validity
+// - and returning delay which should be accounted before executing this resource request
 type Resource interface {
 	After() <-chan time.Time
 	Match(*http.Request) bool
@@ -28,15 +33,19 @@ type Resource interface {
 
 type static struct {
 	method string
-	path   *regexp.Regexp
+	url    *regexp.Regexp
 	delay  time.Duration
 	codes  map[int]bool
 }
 
-func NewResourceStatic(method string, path *regexp.Regexp, delay time.Duration, allowedCodes ...int) Resource {
+// NewResourceStatic returns new resource instance that always waits for static specified delay.
+// Returned resource matches each request against both provided http method and full url regexp.
+// Returned resource checks if response result http code is included in provided allowed codes,
+// if it is not it returnes `ErrResourceUnexpectedResponseCode`.
+func NewResourceStatic(method string, url *regexp.Regexp, delay time.Duration, allowedCodes ...int) Resource {
 	rs := static{
 		method: method,
-		path:   path,
+		url:    url,
 		delay:  delay,
 		codes:  make(map[int]bool, len(allowedCodes)),
 	}
@@ -54,7 +63,7 @@ func (r static) Match(req *http.Request) bool {
 	if r.method != req.Method {
 		return false
 	}
-	if r.path != nil && !r.path.MatchString(req.URL.String()) {
+	if r.url != nil && !r.url.MatchString(req.URL.String()) {
 		return false
 	}
 	return true
@@ -78,12 +87,18 @@ type average struct {
 	capacity int64
 }
 
-func NewResourceAverage(method string, path *regexp.Regexp, delay time.Duration, capacity int, allowedCodes ...int) Resource {
+// NewResourceAverage returns new resource instance that dynamically adjust wait delay based on
+// recieved successfull responses average delays.
+// Returned resource is starting to use dynamically adjusted wait delay only after capacity/4 calls.
+// Returned resource matches each request against both provided http method and full url regexp.
+// Returned resource checks if response result http code is included in provided allowed codes,
+// if it is not it returnes `ErrResourceUnexpectedResponseCode`.
+func NewResourceAverage(method string, url *regexp.Regexp, delay time.Duration, capacity int, allowedCodes ...int) Resource {
 	if capacity < 0 {
 		capacity = math.MaxInt16
 	}
 	return &average{
-		static:   NewResourceStatic(method, path, delay, allowedCodes...).(static),
+		static:   NewResourceStatic(method, url, delay, allowedCodes...).(static),
 		capacity: int64(capacity),
 	}
 }
@@ -123,7 +138,14 @@ type percentiles struct {
 	lock       sync.RWMutex
 }
 
-func NewResourcePercentiles(method string, path *regexp.Regexp, delay time.Duration, percentile float64, capacity int, allowedCodes ...int) Resource {
+// NewResourcePercentiles returns new resource instance that dynamically adjust wait delay based on
+// recieved successfull responses delays percentiles.
+// Returned resource is starting to use dynamically adjusted wait delay only after capacity/2 calls,
+// if more than provided capacity calls were recieved, first half of delay percentiles buffer will be flushed.
+// Returned resource matches each request against both provided http method and full url regexp.
+// Returned resource checks if response result http code is included in provided allowed codes,
+// if it is not it returnes `ErrResourceUnexpectedResponseCode`.
+func NewResourcePercentiles(method string, url *regexp.Regexp, delay time.Duration, percentile float64, capacity int, allowedCodes ...int) Resource {
 	percentile = math.Abs(percentile)
 	if percentile > 1.0 {
 		percentile = 1.0
@@ -132,7 +154,7 @@ func NewResourcePercentiles(method string, path *regexp.Regexp, delay time.Durat
 		capacity = math.MaxInt16
 	}
 	return &percentiles{
-		static:     NewResourceStatic(method, path, delay, allowedCodes...).(static),
+		static:     NewResourceStatic(method, url, delay, allowedCodes...).(static),
 		percentile: percentile,
 		capacity:   int64(capacity),
 		latencies:  make([]time.Duration, 0, capacity+capacity/2),
