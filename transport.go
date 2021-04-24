@@ -7,32 +7,32 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-type processor struct {
+type transport struct {
 	internal  http.RoundTripper
 	resources []Resource
-	times     uint64
+	calls     uint64
 }
 
-func NewRoundTripper(internal http.RoundTripper, times uint64, resources ...Resource) http.RoundTripper {
-	return processor{internal: internal, times: times, resources: resources}
+func NewRoundTripper(internal http.RoundTripper, calls uint64, resources ...Resource) http.RoundTripper {
+	return transport{internal: internal, calls: calls, resources: resources}
 }
 
-func (rt processor) RoundTrip(req *http.Request) (resp *http.Response, err error) {
-	for _, rs := range rt.resources {
+func (t transport) RoundTrip(req *http.Request) (resp *http.Response, err error) {
+	for _, rs := range t.resources {
 		if rs.Match(req) {
-			return rt.multiRoundTrip(req, rs)
+			return t.multiRoundTrip(req, rs)
 		}
 	}
-	return rt.internal.RoundTrip(req)
+	return t.internal.RoundTrip(req)
 }
 
-func (rt processor) multiRoundTrip(req *http.Request, rs Resource) (resp *http.Response, err error) {
+func (t transport) multiRoundTrip(req *http.Request, rs Resource) (resp *http.Response, err error) {
 	g, ctx := errgroup.WithContext(req.Context())
 	req = req.WithContext(ctx)
-	res := make(chan interface{}, rt.times+1)
+	res := make(chan interface{}, t.calls+1)
 	g.Go(func() error {
 		defer close(res)
-		for i := uint64(0); i < rt.times+1; i++ {
+		for i := uint64(0); i < t.calls+1; i++ {
 			select {
 			case r := <-res:
 				switch tr := r.(type) {
@@ -51,7 +51,7 @@ func (rt processor) multiRoundTrip(req *http.Request, rs Resource) (resp *http.R
 	})
 	roundTrip := func() error {
 		h := rs.Hook(req)
-		resp, err := rt.internal.RoundTrip(req)
+		resp, err := t.internal.RoundTrip(req)
 		if err != nil {
 			res <- err
 			return nil
@@ -66,7 +66,7 @@ func (rt processor) multiRoundTrip(req *http.Request, rs Resource) (resp *http.R
 	}
 	g.Go(roundTrip)
 	<-rs.After()
-	for i := uint64(0); i < rt.times; i++ {
+	for i := uint64(0); i < t.calls; i++ {
 		g.Go(roundTrip)
 	}
 	_ = g.Wait()
