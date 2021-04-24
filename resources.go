@@ -139,13 +139,13 @@ func NewResourceDynamic(method Method, path *regexp.Regexp, delay time.Duration,
 func (r *dynamic) After() <-chan time.Time {
 	delay := r.delay
 	r.lock.RLock()
-	if l := len(r.latencies); l >= r.capacity/2 {
+	if l := len(r.latencies); l >= r.capacity {
 		lat := make([]time.Duration, l)
 		copy(lat, r.latencies)
 		sort.Slice(lat, func(i, j int) bool {
 			return lat[i] < lat[j]
 		})
-		delay = lat[int(math.Round(float64(l)*r.percentile))]
+		delay = lat[int(math.Round(float64(l)*r.percentile))-1]
 	}
 	r.lock.RUnlock()
 	return time.After(delay)

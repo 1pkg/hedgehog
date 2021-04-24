@@ -28,7 +28,6 @@ func (t transport) RoundTrip(req *http.Request) (resp *http.Response, err error)
 
 func (t transport) multiRoundTrip(req *http.Request, rs Resource) (resp *http.Response, err error) {
 	g, ctx := errgroup.WithContext(req.Context())
-	req = req.WithContext(ctx)
 	res := make(chan interface{}, t.calls+1)
 	defer close(res)
 	g.Go(func() error {
@@ -38,6 +37,7 @@ func (t transport) multiRoundTrip(req *http.Request, rs Resource) (resp *http.Re
 				switch tr := r.(type) {
 				case *http.Response:
 					resp = tr
+					err = nil
 					// if we got result hard stop execution.
 					return context.Canceled
 				case error:
@@ -55,6 +55,7 @@ func (t transport) multiRoundTrip(req *http.Request, rs Resource) (resp *http.Re
 		return nil
 	})
 	roundTrip := func() error {
+		req := req.Clone(ctx)
 		h := rs.Hook(req)
 		resp, err := t.internal.RoundTrip(req)
 		if err != nil {
