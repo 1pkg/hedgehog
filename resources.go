@@ -11,10 +11,10 @@ import (
 )
 
 type Resource interface {
+	After() <-chan time.Time
 	Match(*http.Request) bool
 	Check(*http.Response) error
-	After() <-chan time.Time
-	Acknowledge(time.Duration)
+	Hook(*http.Request) func(*http.Response)
 }
 
 type Method uint16
@@ -65,17 +65,21 @@ type static struct {
 	codes  map[int]bool
 }
 
-func NewResourceStatic(method Method, path *regexp.Regexp, delay time.Duration, codes ...int) Resource {
+func NewResourceStatic(method Method, path *regexp.Regexp, delay time.Duration, allowedCodes ...int) Resource {
 	rs := static{
 		method: method,
 		path:   path,
 		delay:  delay,
-		codes:  make(map[int]bool, len(codes)),
+		codes:  make(map[int]bool, len(allowedCodes)),
 	}
-	for _, code := range codes {
+	for _, code := range allowedCodes {
 		rs.codes[code] = true
 	}
 	return rs
+}
+
+func (r static) After() <-chan time.Time {
+	return time.After(r.delay)
 }
 
 func (r static) Match(req *http.Request) bool {
@@ -95,11 +99,9 @@ func (r static) Check(resp *http.Response) error {
 	return nil
 }
 
-func (r static) After() <-chan time.Time {
-	return time.After(r.delay)
+func (r static) Hook(*http.Request) func(*http.Response) {
+	return func(*http.Response) {}
 }
-
-func (r static) Acknowledge(time.Duration) {}
 
 type dynamic struct {
 	static
@@ -109,7 +111,7 @@ type dynamic struct {
 	lock       sync.RWMutex
 }
 
-func NewResourceDynamic(method Method, path *regexp.Regexp, delay time.Duration, percentile float64, capacity uint64, codes ...int) Resource {
+func NewResourceDynamic(method Method, path *regexp.Regexp, delay time.Duration, percentile float64, capacity uint64, allowedCodes ...int) Resource {
 	percentile = math.Abs(percentile)
 	if percentile > 1.0 {
 		percentile = 1.0
@@ -118,7 +120,7 @@ func NewResourceDynamic(method Method, path *regexp.Regexp, delay time.Duration,
 		capacity = math.MaxInt32
 	}
 	return &dynamic{
-		static:     NewResourceStatic(method, path, delay, codes...).(static),
+		static:     NewResourceStatic(method, path, delay, allowedCodes...).(static),
 		percentile: percentile,
 		capacity:   int(capacity),
 		latencies:  make([]time.Duration, 0, capacity),
@@ -140,11 +142,15 @@ func (r *dynamic) After() <-chan time.Time {
 	return time.After(delay)
 }
 
-func (r *dynamic) Acknowledge(d time.Duration) {
-	r.lock.Lock()
-	r.latencies = append(r.latencies, d)
-	if len(r.latencies) > r.capacity*2 {
-		r.latencies = r.latencies[r.capacity:]
+func (r *dynamic) Hook(*http.Request) func(*http.Response) {
+	t := time.Now()
+	return func(*http.Response) {
+		d := time.Since(t)
+		r.lock.Lock()
+		r.latencies = append(r.latencies, d)
+		if len(r.latencies) >= r.capacity*2 {
+			r.latencies = r.latencies[r.capacity:]
+		}
+		r.lock.Unlock()
 	}
-	r.lock.Unlock()
 }
