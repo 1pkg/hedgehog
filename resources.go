@@ -91,7 +91,7 @@ func NewResourceAverage(method string, path *regexp.Regexp, delay time.Duration,
 func (r *average) After() <-chan time.Time {
 	delay := r.delay
 	count := atomic.LoadInt64(&r.count)
-	if count > r.capacity {
+	if count >= r.capacity {
 		delay = time.Duration(atomic.LoadInt64(&r.sum) / count)
 	}
 	return time.After(delay)
@@ -107,7 +107,7 @@ func (r *average) Hook(*http.Request) func(*http.Response) {
 		// in case of overflow:
 		// - calculate average value on capacity+1
 		// - replace current sum and count with it
-		if newval < 0 {
+		if newval < 0 || count > r.capacity*2 {
 			val := oldval / count * (r.capacity + 1)
 			atomic.StoreInt64(&r.sum, val)
 			atomic.StoreInt64(&r.count, r.capacity+1)

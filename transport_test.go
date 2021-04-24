@@ -11,14 +11,6 @@ import (
 	"time"
 )
 
-const (
-	ms_0  = time.Millisecond * 0
-	ms_1  = time.Millisecond * 1
-	ms_5  = time.Millisecond * 5
-	ms_10 = time.Millisecond * 10
-	ms_20 = time.Millisecond * 20
-)
-
 func tserv(method string, path string, codes []int, delays []time.Duration) (string, context.CancelFunc) {
 	var i int64
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
@@ -73,7 +65,28 @@ func TestRoundTripper(t *testing.T) {
 			resp tresp
 		}
 	}{
-		"should execute default transport if no matching resources find": {
+		"should execute default transport if no matching resources found method": {
+			ctx: context.TODO(),
+			t: NewRoundTripper(
+				http.DefaultTransport,
+				1,
+				NewResourceStatic(http.MethodGet, regexp.MustCompile(`profile`), ms_1, http.StatusOK),
+			),
+			tcall: struct {
+				req  treq
+				resp tresp
+			}{
+				req: treq{
+					method: http.MethodHead,
+					path:   "/profile",
+					codes:  []int{http.StatusOK, http.StatusOK},
+				},
+				resp: tresp{
+					code: http.StatusOK,
+				},
+			},
+		},
+		"should execute default transport if no matching resources found path": {
 			ctx: context.TODO(),
 			t: NewRoundTripper(
 				http.DefaultTransport,
@@ -193,11 +206,11 @@ func TestRoundTripper(t *testing.T) {
 					method: http.MethodGet,
 					path:   "/profile/7",
 					codes:  []int{http.StatusOK, http.StatusOK, http.StatusOK, http.StatusOK},
-					delays: []time.Duration{ms_20, ms_5, ms_20, ms_5, ms_20},
+					delays: []time.Duration{ms_50, ms_2, ms_50, ms_5, ms_50},
 				},
 				resp: tresp{
 					code:  http.StatusOK,
-					delay: ms_10,
+					delay: ms_20,
 				},
 			},
 		},
