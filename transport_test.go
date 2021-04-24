@@ -33,7 +33,7 @@ func tserv(method string, path string, codes []int, delays []time.Duration) (str
 	return srv.URL, srv.Close
 }
 
-func unwrapHttpError(err error) string {
+func unwrapHTTPError(err error) string {
 	if err == nil {
 		return "nil"
 	}
@@ -230,8 +230,8 @@ func TestRoundTripper(t *testing.T) {
 			resp, err := cli.Do(req)
 			ds := time.Since(ts)
 			stop()
-			if unwrapHttpError(tcase.tcall.resp.err) != unwrapHttpError(err) {
-				t.Fatalf("expected err %v but got %v", unwrapHttpError(tcase.tcall.resp.err), unwrapHttpError(err))
+			if unwrapHTTPError(tcase.tcall.resp.err) != unwrapHTTPError(err) {
+				t.Fatalf("expected err %v but got %v", unwrapHTTPError(tcase.tcall.resp.err), unwrapHTTPError(err))
 			}
 			if tcase.tcall.resp.code != 0 && tcase.tcall.resp.code != resp.StatusCode {
 				t.Fatalf("expected response status code %d but got %d", tcase.tcall.resp.code, resp.StatusCode)

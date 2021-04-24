@@ -88,7 +88,7 @@ type average struct {
 }
 
 // NewResourceAverage returns new resource instance that dynamically adjust wait delay based on
-// recieved successfull responses average delays.
+// received successful responses average delays.
 // Returned resource is starting to use dynamically adjusted wait delay only after capacity/4 calls.
 // Returned resource matches each request against both provided http method and full url regexp.
 // Returned resource checks if response result http code is included in provided allowed codes,
@@ -139,9 +139,9 @@ type percentiles struct {
 }
 
 // NewResourcePercentiles returns new resource instance that dynamically adjust wait delay based on
-// recieved successfull responses delays percentiles.
+// received successful responses delays percentiles.
 // Returned resource is starting to use dynamically adjusted wait delay only after capacity/2 calls,
-// if more than provided capacity calls were recieved, first half of delay percentiles buffer will be flushed.
+// if more than provided capacity calls were received, first half of delay percentiles buffer will be flushed.
 // Returned resource matches each request against both provided http method and full url regexp.
 // Returned resource checks if response result http code is included in provided allowed codes,
 // if it is not it returnes `ErrResourceUnexpectedResponseCode`.

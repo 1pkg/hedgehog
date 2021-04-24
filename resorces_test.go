@@ -7,12 +7,13 @@ import (
 	"time"
 )
 
+//nolint
 const (
 	ms_0   = time.Millisecond * 0
 	ms_1   = time.Millisecond * 1
 	ms_2   = time.Millisecond * 2
 	ms_5   = time.Millisecond * 5
-	ms_7   = time.Millisecond * 7
+	ms_8   = time.Millisecond * 8
 	ms_10  = time.Millisecond * 10
 	ms_20  = time.Millisecond * 20
 	ms_50  = time.Millisecond * 50
@@ -53,7 +54,7 @@ func TestResorces(t *testing.T) {
 		"percentiles resource after should be adjusted accurately": {
 			res:    NewResourcePercentiles("", regexp.MustCompile(``), ms_1, 0.9, 8, 0),
 			delays: []time.Duration{ms_5, ms_5, ms_5, ms_5, ms_5},
-			after:  ms_7,
+			after:  ms_8,
 		},
 		"percentiles resource after should be adjusted accurately with overflow": {
 			res:    NewResourcePercentiles("", regexp.MustCompile(``), ms_1, 0.9, 10, 0),
