@@ -7,17 +7,17 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-type hedging struct {
+type processor struct {
 	internal  http.RoundTripper
 	resources []Resource
 	times     uint64
 }
 
 func NewRoundTripper(internal http.RoundTripper, times uint64, resources ...Resource) http.RoundTripper {
-	return hedging{internal: internal, times: times, resources: resources}
+	return processor{internal: internal, times: times, resources: resources}
 }
 
-func (rt hedging) RoundTrip(req *http.Request) (resp *http.Response, err error) {
+func (rt processor) RoundTrip(req *http.Request) (resp *http.Response, err error) {
 	for _, rs := range rt.resources {
 		if rs.Match(req) {
 			return rt.multiRoundTrip(req, rs)
@@ -26,7 +26,7 @@ func (rt hedging) RoundTrip(req *http.Request) (resp *http.Response, err error) 
 	return rt.internal.RoundTrip(req)
 }
 
-func (rt hedging) multiRoundTrip(req *http.Request, rs Resource) (resp *http.Response, err error) {
+func (rt processor) multiRoundTrip(req *http.Request, rs Resource) (resp *http.Response, err error) {
 	g, ctx := errgroup.WithContext(req.Context())
 	req = req.WithContext(ctx)
 	res := make(chan interface{}, rt.times+1)
