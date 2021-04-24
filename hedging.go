@@ -1,6 +1,7 @@
 package hedgehog
 
 import (
+	"context"
 	"net/http"
 	"time"
 
@@ -13,7 +14,7 @@ type hedging struct {
 	times     uint64
 }
 
-func NewHedging(internal http.RoundTripper, times uint64, resources ...Resource) http.RoundTripper {
+func NewRoundTripper(internal http.RoundTripper, times uint64, resources ...Resource) http.RoundTripper {
 	return hedging{internal: internal, times: times + 1, resources: resources}
 }
 
@@ -34,7 +35,15 @@ func (rt hedging) RoundTrip(req *http.Request) (resp *http.Response, err error) 
 		defer close(results)
 		for i := uint64(0); i < rt.times; i++ {
 			select {
-			case <-results:
+			case r := <-results:
+				switch tr := r.(type) {
+				case *http.Response:
+					resp = tr
+					// if we got result hard stop execution.
+					return context.Canceled
+				case error:
+					err = tr
+				}
 			case <-ctx.Done():
 				return ctx.Err()
 			}

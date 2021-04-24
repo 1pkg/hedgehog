@@ -106,10 +106,26 @@ type dynamic struct {
 	percentile float64
 	capacity   int
 	latencies  []time.Duration
-	lock       *sync.RWMutex
+	lock       sync.RWMutex
 }
 
-func (r dynamic) After() <-chan time.Time {
+func NewResourceDynamic(method Method, path *regexp.Regexp, delay time.Duration, percentile float64, capacity uint64, codes ...int) Resource {
+	percentile = math.Abs(percentile)
+	if percentile > 1.0 {
+		percentile = 1.0
+	}
+	if capacity > math.MaxInt32 {
+		capacity = math.MaxInt32
+	}
+	return &dynamic{
+		static:     NewResourceStatic(method, path, delay, codes...).(static),
+		percentile: percentile,
+		capacity:   int(capacity),
+		latencies:  make([]time.Duration, 0, capacity),
+	}
+}
+
+func (r *dynamic) After() <-chan time.Time {
 	delay := r.delay
 	r.lock.RLock()
 	if l := len(r.latencies); l >= r.capacity/2 {
@@ -124,7 +140,7 @@ func (r dynamic) After() <-chan time.Time {
 	return time.After(delay)
 }
 
-func (r dynamic) Acknowledge(d time.Duration) {
+func (r *dynamic) Acknowledge(d time.Duration) {
 	r.lock.Lock()
 	r.latencies = append(r.latencies, d)
 	if len(r.latencies) > r.capacity*2 {
