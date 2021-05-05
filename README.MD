@@ -1,5 +1,5 @@
 <p align="center">
-    <img src="https://raw.githubusercontent.com/1pkg/hedgehog/master/gopher.png" alt="gohalt"/>
+    <img src="https://raw.githubusercontent.com/1pkg/hedgehog/master/gopher.png?nocache" alt="gohalt"/>
 </p>
 
 # Hedgehog 🦔: http hedged transport in go
