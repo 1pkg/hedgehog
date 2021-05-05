@@ -27,11 +27,11 @@ type transport struct {
 }
 
 // NewRoundTripper returns new http hedged transport with provided resources.
-// Returned transport will make hedged http calls in case of resource matching http request up to calls+1 times,
+// Returned transport makes hedged http calls in case of resource matching http request up to calls+1 times,
 // original http call starts right away and then all hedged calls start together after delay specified by resource.
-// Returned transport will process and return first successful http response, in case all hedged response failed
-// it will simply return first occurred error.
-// If no matching resource were found - the transport will simply call underlying transport.
+// Returned transport processes and returns first successful http response all other requests in flight are canceled,
+// in case all hedged response failed it simply returns first occurred error.
+// If no matching resources were found - the transport simply calls underlying transport.
 func NewRoundTripper(internal http.RoundTripper, calls uint64, resources ...Resource) http.RoundTripper {
 	return transport{internal: internal, calls: calls, resources: resources}
 }

@@ -87,7 +87,7 @@ type average struct {
 	capacity int64
 }
 
-// NewResourceAverage returns new resource instance that dynamically adjust wait delay based on
+// NewResourceAverage returns new resource instance that dynamically adjusts wait delay based on
 // received successful responses average delays.
 // Returned resource is starting to use dynamically adjusted wait delay only after capacity/4 calls.
 // Returned resource matches each request against both provided http method and full url regexp.
@@ -138,7 +138,7 @@ type percentiles struct {
 	lock       sync.RWMutex
 }
 
-// NewResourcePercentiles returns new resource instance that dynamically adjust wait delay based on
+// NewResourcePercentiles returns new resource instance that dynamically adjusts wait delay based on
 // received successful responses delays percentiles.
 // Returned resource is starting to use dynamically adjusted wait delay only after capacity/2 calls,
 // if more than provided capacity calls were received, first half of delay percentiles buffer will be flushed.
